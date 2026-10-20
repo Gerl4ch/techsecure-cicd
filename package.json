@@ -5,7 +5,9 @@
   "description": "Aplicacao Web minima da TechSecure Solutions usada para demonstrar uma pipeline CI/CD com seguranca integrada (DevSecOps).",
   "private": true,
   "main": "src/server.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "//-scripts": "start = arranca o servidor | build = verifica a sintaxe dos ficheiros (equivalente a 'compilar' numa app Node, que nao precisa de compilacao) | test = corre os testes automatizados com o test runner nativo do Node (sem dependencias extra).",
   "scripts": {
     "start": "node src/server.js",
@@ -15,6 +17,6 @@
   "//-dependencias": "express: framework web (usamos ^ para aceitar atualizacoes seguras 4.x). lodash: FIXADO PROPOSITADAMENTE na versao 4.17.15, que tem vulnerabilidades conhecidas (HIGH). E isto que o Trivy e o npm audit vao detetar. NAO atualizar ate a demonstracao do 'antes' estar gravada/capturada. Ver docs/02-ANALISE-SEGURANCA.md.",
   "dependencies": {
     "express": "^4.21.2",
-    "lodash": "4.17.15"
+    "lodash": "^4.18.1"
   }
 }
