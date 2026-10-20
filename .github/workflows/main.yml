@@ -1,0 +1,315 @@
+# ==============================================================================
+#  .github/workflows/main.yml — Pipeline CI/CD segura da TechSecure Solutions
+# ==============================================================================
+#  FLUXO COMPLETO (cada seta é uma dependência "needs" entre jobs):
+#
+#   Código ──► [1 Build] ──► [2 Teste] ──► [3 Segurança] ──► [4 Imagem] ──► [5 Deploy] ──► Contentor
+#   (push)      npm ci        npm test      Trivy+npm audit    docker build    deploy.sh     app a correr
+#               + sintaxe                   (gate bloqueia)    + push GHCR
+#
+#  REGRA DE OURO: se um job falhar, os seguintes NÃO correm. É isto que faz
+#  com que código partido ou vulnerável não chegue ao contentor ("shift left").
+#
+#  O GitHub lê automaticamente QUALQUER ficheiro .yml dentro de .github/workflows/.
+#  Cuidado com a indentação: o YAML usa 2 espaços e NÃO aceita tabs.
+#
+#  VARIÁVEIS DO REPOSITÓRIO (Settings > Secrets and variables > Actions > Variables):
+#    SECURITY_GATE  = false  -> o scan só REPORTA (a pipeline não bloqueia).
+#                     (vazia/qualquer outro valor) -> o scan BLOQUEIA se houver
+#                     vulnerabilidades HIGH/CRITICAL com correção disponível.
+#    DEPLOY_RUNNER  = self-hosted -> o deploy corre no PC da equipa (runner
+#                     auto-alojado) e o contentor fica a correr nesse PC.
+#                     (vazia) -> corre num servidor do GitHub (ubuntu-latest).
+# ==============================================================================
+
+name: "CI/CD Seguro - TechSecure Solutions"   # Nome mostrado no separador "Actions".
+
+# ------------------------------------------------------------------------------
+# QUANDO A PIPELINE ARRANCA (etapa: CÓDIGO / Source)
+# ------------------------------------------------------------------------------
+on:
+  push:
+    branches: [ main ]        # Cada push para a branch main dispara a pipeline automaticamente.
+  pull_request:
+    branches: [ main ]        # Pull requests correm Build+Teste+Segurança (NÃO fazem deploy).
+  workflow_dispatch:          # Permite correr à mão: Actions > "Run workflow" (útil para testar).
+
+# ------------------------------------------------------------------------------
+# PERMISSÕES DO TOKEN AUTOMÁTICO (GITHUB_TOKEN)
+# ------------------------------------------------------------------------------
+# Princípio do menor privilégio: por defeito a pipeline só pode LER o código.
+# Os jobs que precisam de mais (publicar imagem) pedem-no individualmente abaixo.
+permissions:
+  contents: read
+
+# ------------------------------------------------------------------------------
+# CONCORRÊNCIA: evita dois deploys ao mesmo tempo na mesma branch
+# ------------------------------------------------------------------------------
+concurrency:
+  group: techsecure-pipeline-${{ github.ref }}
+  cancel-in-progress: false   # false = o run novo espera pelo anterior (não o mata a meio de um deploy).
+
+# ------------------------------------------------------------------------------
+# VARIÁVEIS DE AMBIENTE GLOBAIS (visíveis em todos os jobs)
+# ------------------------------------------------------------------------------
+env:
+  NODE_VERSION: "22"   # Mesma versão major do Dockerfile (node:22-alpine) -> testamos no que vamos executar.
+  # Imagem do Trivy, FIXADA numa versão concreta. Porquê:
+  #  * Não usamos a action de terceiros "aquasecurity/trivy-action": em março de 2026
+  #    as suas tags foram comprometidas num ataque à cadeia de fornecimento (supply
+  #    chain) e a versão 0.69.4 do Trivy foi publicada com malware. Correr o Trivy
+  #    diretamente a partir de uma imagem fixada reduz esse risco.
+  #  * 0.69.3 é uma das versões indicadas como seguras no aviso oficial
+  #    (GHSA-69fq-xp46-6x23). Se atualizarem, confirmem sempre esse aviso e prefiram
+  #    fixar pelo digest (@sha256:...) e não só pela tag.
+  TRIVY_IMAGE: "ghcr.io/aquasecurity/trivy:0.69.3"
+
+jobs:
+
+  # ============================================================================
+  # JOB 1 — BUILD
+  # Etapa do projeto: "Build" (preparar a aplicação).
+  # Numa app Node não há compilação: "build" = instalar dependências a partir do
+  # lockfile + verificar que o código tem sintaxe válida.
+  # ============================================================================
+  build:
+    name: "1 - Build"
+    runs-on: ubuntu-latest        # Máquina virtual Linux gratuita fornecida pelo GitHub.
+    steps:
+      # Descarrega o código do repositório para a máquina virtual (começa vazia).
+      - name: "[Source] Obter o código"
+        uses: actions/checkout@v4
+
+      # Instala o Node.js na versão pedida e ativa cache do npm (acelera runs seguintes).
+      # "cache: npm" usa o package-lock.json como chave da cache.
+      - name: "[Build] Instalar Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # "npm ci" instala EXATAMENTE as versões do package-lock.json. Falha se o
+      # lockfile não existir ou estiver desalinhado com o package.json.
+      - name: "[Build] Instalar dependências (npm ci)"
+        run: npm ci
+
+      # Executa o script "build" do package.json (verificação de sintaxe com node --check).
+      - name: "[Build] Verificar sintaxe da aplicação"
+        run: npm run build
+
+  # ============================================================================
+  # JOB 2 — TESTE
+  # Etapa do projeto: "Teste" (pelo menos um teste automatizado).
+  # ============================================================================
+  test:
+    name: "2 - Teste"
+    needs: build                  # Só corre se o job "build" tiver terminado com sucesso.
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[Source] Obter o código"
+        uses: actions/checkout@v4
+
+      - name: "[Teste] Instalar Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # Cada job corre numa máquina NOVA e limpa: temos de reinstalar as dependências.
+      - name: "[Teste] Instalar dependências"
+        run: npm ci
+
+      # Corre test/app.test.js (4 testes). Se algum falhar, o job fica vermelho e
+      # a pipeline pára aqui. A saída detalhada é a EVIDÊNCIA da etapa de testes.
+      - name: "[Teste] Executar testes automatizados"
+        run: npm test
+
+  # ============================================================================
+  # JOB 3 — ANÁLISE DE SEGURANÇA (Security Scan / SCA)
+  # Etapa do projeto: "Análise de Segurança".
+  # Duas ferramentas independentes olham para as dependências do package-lock.json:
+  #   a) Trivy (base de dados de vulnerabilidades da Aqua Security);
+  #   b) npm audit (base de dados de avisos do próprio npm/GitHub).
+  # Duas ferramentas = mais confiança nos achados e mais evidências para o relatório.
+  #
+  # DESENHO "RELATAR SEMPRE, BLOQUEAR SE CONFIGURADO":
+  #   1. Os scans correm até ao fim mesmo com achados (não abortam a meio);
+  #   2. os relatórios ficam sempre guardados (resumo do job + artefacto);
+  #   3. só no fim o passo "Gate" decide se bloqueia a pipeline.
+  # ============================================================================
+  security:
+    name: "3 - Analise de Seguranca"
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[Source] Obter o código"
+        uses: actions/checkout@v4
+
+      - name: "[Segurança] Instalar Node.js (para o npm audit)"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # --- 3a) TRIVY ----------------------------------------------------------
+      # Corremos o Trivy num contentor Docker (já vem instalado nas máquinas do GitHub).
+      #  -v "$PWD:/project" -w /project : monta o repositório dentro do contentor.
+      #  fs .                  : modo "filesystem" -> lê o package-lock.json da pasta atual.
+      #  --scanners vuln       : só procura vulnerabilidades conhecidas (CVEs) em dependências.
+      #  --severity HIGH,CRITICAL : só reporta/bloqueia severidades altas e críticas.
+      #  --ignore-unfixed      : ignora achados SEM correção publicada (não adianta bloquear
+      #                          por algo que ninguém consegue corrigir ainda).
+      #  --exit-code 1         : o Trivy devolve 1 se encontrar algo (usado pelo Gate).
+      #  | tee trivy-report.txt: mostra no log E guarda num ficheiro (evidência).
+      # "set +e" impede que o passo falhe aqui; guardamos o código de saída do Trivy
+      # (PIPESTATUS[0] = código do 1.º comando do pipe) para decidir mais tarde.
+      - name: "[Segurança] Trivy - análise de dependências"
+        id: trivy
+        run: |
+          set +e
+          docker run --rm -v "$PWD:/project" -w /project "$TRIVY_IMAGE" \
+            fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --exit-code 1 --no-progress --format table . | tee trivy-report.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      # --- 3b) NPM AUDIT -------------------------------------------------------
+      # Compara o package-lock.json com a base de avisos do npm.
+      #  --audit-level=high : devolve erro apenas para severidade >= high.
+      - name: "[Segurança] npm audit - análise de dependências"
+        id: npmaudit
+        run: |
+          set +e
+          npm audit --audit-level=high 2>&1 | tee npm-audit-report.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      # Escreve os dois relatórios no "Summary" da execução (separador do run no
+      # GitHub). É a forma mais bonita de tirar a captura de ecrã para o relatório.
+      # "if: always()" garante que corre mesmo se algum passo anterior tiver falhado.
+      - name: "[Segurança] Publicar relatórios no resumo do job"
+        if: always()
+        run: |
+          {
+            echo "## Resultados da análise de segurança"
+            echo "### Trivy (exit code: ${{ steps.trivy.outputs.exit_code }})"
+            echo '```'
+            cat trivy-report.txt
+            echo '```'
+            echo "### npm audit (exit code: ${{ steps.npmaudit.outputs.exit_code }})"
+            echo '```'
+            cat npm-audit-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Guarda os relatórios como "artefacto" descarregável (evidência permanente).
+      - name: "[Segurança] Guardar relatórios como artefacto"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorios-seguranca
+          path: |
+            trivy-report.txt
+            npm-audit-report.txt
+
+      # GATE DE SEGURANÇA: o único passo que pode reprovar esta etapa.
+      # Corre a menos que a variável SECURITY_GATE do repositório seja "false".
+      # Se qualquer ferramenta encontrou algo (exit code != 0), falha => os jobs
+      # "imagem" e "deploy" não correm e a versão vulnerável NÃO chega ao contentor.
+      - name: "[Segurança] Gate - bloquear se houver vulnerabilidades HIGH/CRITICAL"
+        if: ${{ vars.SECURITY_GATE != 'false' }}
+        env:
+          TRIVY_EXIT: ${{ steps.trivy.outputs.exit_code }}
+          AUDIT_EXIT: ${{ steps.npmaudit.outputs.exit_code }}
+        run: |
+          if [ "$TRIVY_EXIT" != "0" ] || [ "$AUDIT_EXIT" != "0" ]; then
+            echo "::error::Gate de segurança: vulnerabilidades HIGH/CRITICAL encontradas (Trivy=$TRIVY_EXIT, npm audit=$AUDIT_EXIT). Deploy bloqueado."
+            exit 1
+          fi
+          echo "Gate de segurança: sem vulnerabilidades HIGH/CRITICAL com correção disponível."
+
+  # ============================================================================
+  # JOB 4 — CONSTRUÇÃO DA IMAGEM
+  # Etapa do projeto: "Construção da Imagem" (build da imagem Docker + publicação).
+  # Só corre em push/manual na branch main (nunca em pull requests).
+  # ============================================================================
+  image:
+    name: "4 - Construcao da Imagem"
+    needs: security
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write             # Necessário para publicar a imagem no GitHub Container Registry (GHCR).
+    outputs:
+      image_ref: ${{ steps.meta.outputs.image_ref }}   # Passa o nome da imagem ao job de deploy.
+    steps:
+      - name: "[Source] Obter o código"
+        uses: actions/checkout@v4
+
+      # Calcula o nome completo da imagem: ghcr.io/<dono>/<repo>:<hash-do-commit>.
+      #  * ${GITHUB_REPOSITORY,,} converte para minúsculas (o Docker NÃO aceita maiúsculas).
+      #  * Usar o hash do commit como tag torna cada imagem rastreável até ao código que a gerou.
+      - name: "[Imagem] Calcular nome e tag da imagem"
+        id: meta
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "image_ref=${IMAGE}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_latest=${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+
+      # Constrói a imagem a partir do Dockerfile (ponto final = contexto = pasta atual).
+      # -t duas vezes = duas etiquetas para a mesma imagem (hash e "latest").
+      - name: "[Imagem] Construir a imagem Docker"
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            -t "${{ steps.meta.outputs.image_ref }}" \
+            -t "${{ steps.meta.outputs.image_latest }}" .
+          docker images
+
+      # Autenticação no GHCR com o token automático (sem passwords guardadas).
+      # --password-stdin evita que o token apareça na lista de processos.
+      - name: "[Imagem] Login no GHCR"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # Publica as duas etiquetas no registo, para o job de deploy as poder descarregar.
+      - name: "[Imagem] Publicar a imagem no GHCR"
+        run: |
+          docker push "${{ steps.meta.outputs.image_ref }}"
+          docker push "${{ steps.meta.outputs.image_latest }}"
+
+  # ============================================================================
+  # JOB 5 — DEPLOY AUTOMÁTICO → CONTENTOR
+  # Etapa do projeto: "Deploy Automático" e "Contentor".
+  # Descarrega a imagem do GHCR e arranca/substitui o contentor (scripts/deploy.sh).
+  #
+  # ONDE CORRE (variável DEPLOY_RUNNER):
+  #  * vazia          -> servidor do GitHub: valida o deploy (health check + smoke test),
+  #                      mas o contentor desaparece quando o job termina.
+  #  * self-hosted    -> no PC da equipa com Docker Desktop: o contentor FICA a correr
+  #                      e abre-se http://localhost:3000 na demonstração.
+  # ============================================================================
+  deploy:
+    name: "5 - Deploy automatico (contentor)"
+    needs: image
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ vars.DEPLOY_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: read              # Só precisa de LER a imagem do GHCR.
+    steps:
+      - name: "[Source] Obter o código (para ter scripts/deploy.sh)"
+        uses: actions/checkout@v4
+
+      - name: "[Deploy] Login no GHCR"
+        shell: bash               # Garante bash (em PowerShell, $GH_TOKEN ficaria vazio).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # "shell: bash" garante bash também em runners Windows (via Git Bash).
+      # O nome da imagem vem do job anterior (needs.image.outputs.image_ref).
+      - name: "[Deploy] Substituir o contentor pela versão nova"
+        shell: bash
+        env:
+          IMAGE_REF: ${{ needs.image.outputs.image_ref }}
+        run: bash scripts/deploy.sh "$IMAGE_REF"

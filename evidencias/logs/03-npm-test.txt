@@ -1,0 +1,17 @@
+# 2026-10-19 21:28:32 | comando: npm test
+
+> techsecure-app@1.0.0 test
+> node --test --test-reporter=spec test/app.test.js
+
+✔ GET /health devolve 200 e {"status":"ok"} (78.601325ms)
+✔ GET / devolve HTML com o nome da empresa (9.954158ms)
+✔ GET /api/greet?name=ANA devolve "Olá, Ana!" (8.380292ms)
+✔ GET /api/greet escapa HTML no nome (defesa contra XSS) (6.465166ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 429.14847

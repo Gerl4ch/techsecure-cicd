@@ -1,0 +1,20 @@
+# .gitignore — ficheiros que o Git NÃO deve versionar.
+
+# Dependências instaladas (recriam-se com "npm ci"). O package-lock.json, esse SIM,
+# deve ser versionado: é o que fixa as versões e permite ao Trivy analisar.
+node_modules/
+
+# Segredos e configuração local — nunca fazer commit disto.
+.env
+.env.*
+
+# Relatórios produzidos localmente pelos scans e logs.
+trivy-report.txt
+npm-audit-report.txt
+*.log
+
+# Lixo de sistemas operativos e editores.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

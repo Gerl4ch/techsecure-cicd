@@ -1,0 +1,49 @@
+# 2026-10-19 21:28:34 | comando: docker run --rm -v /home/gerlach/techsecure-cicd:/project -w /project ghcr.io/aquasecurity/trivy:0.69.3 fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --no-progress .
+Unable to find image 'ghcr.io/aquasecurity/trivy:0.69.3' locally
+0.69.3: Pulling from aquasecurity/trivy
+653c20201193: Pulling fs layer
+fc2618f97117: Pulling fs layer
+589002ba0eae: Pulling fs layer
+7b08753d422d: Pulling fs layer
+589002ba0eae: Download complete
+653c20201193: Download complete
+589002ba0eae: Pull complete
+fc2618f97117: Download complete
+fc2618f97117: Pull complete
+7b08753d422d: Download complete
+653c20201193: Pull complete
+7b08753d422d: Pull complete
+Digest: sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+Status: Downloaded newer image for ghcr.io/aquasecurity/trivy:0.69.3
+2026-10-20T00:28:54Z	INFO	[vulndb] Need to update DB
+2026-10-20T00:28:54Z	INFO	[vulndb] Downloading vulnerability DB...
+2026-10-20T00:28:54Z	INFO	[vulndb] Downloading artifact...	repo="mirror.gcr.io/aquasec/trivy-db:2"
+2026-10-20T00:29:47Z	INFO	[vulndb] Artifact successfully downloaded	repo="mirror.gcr.io/aquasec/trivy-db:2"
+2026-10-20T00:29:47Z	INFO	[vuln] Vulnerability scanning is enabled
+2026-10-20T00:29:48Z	INFO	Number of language-specific files	num=1
+2026-10-20T00:29:48Z	INFO	[npm] Detecting vulnerabilities...
+
+Report Summary
+
+┌───────────────────┬──────┬─────────────────┐
+│      Target       │ Type │ Vulnerabilities │
+├───────────────────┼──────┼─────────────────┤
+│ package-lock.json │ npm  │        4        │
+└───────────────────┴──────┴─────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+package-lock.json (npm)
+=======================
+Total: 4 (HIGH: 4, CRITICAL: 0)
+
+┌─────────┬────────────────┬──────────┬────────┬───────────────────┬───────────────┬──────────────────────────────────────────────────────────────┐
+│ Library │ Vulnerability  │ Severity │ Status │ Installed Version │ Fixed Version │                            Title                             │
+├─────────┼────────────────┼──────────┼────────┼───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ lodash  │ CVE-2020-8203  │ HIGH     │ fixed  │ 4.17.15           │ 4.17.19       │ nodejs-lodash: prototype pollution in zipObjectDeep function │
+│         │                │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2020-8203                    │
+│         ├────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│         │ CVE-2021-23337 │          │        │                   │ 4.17.21       │ nodejs-lodash: command injection via template                │
+│         │                │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2021-23337             

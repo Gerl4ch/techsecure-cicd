@@ -1,0 +1,26 @@
+# .dockerignore — lista do que o Docker NÃO deve enviar para a build (contexto).
+# Porquê: builds mais rápidas, imagens mais pequenas e, sobretudo, evitar que
+# segredos ou lixo local (ex.: .git, .env, node_modules do teu PC) entrem na imagem.
+
+# node_modules do teu computador: a imagem instala as suas próprias com "npm ci"
+# (e as do teu PC podem ser de outro sistema operativo, incompatíveis com Alpine).
+node_modules
+
+# Histórico do Git e configuração do GitHub: não fazem falta dentro da imagem.
+.git
+.github
+
+# Testes, documentação e scripts: não são precisos para correr a aplicação.
+test
+docs
+scripts
+*.md
+
+# Segredos e variáveis locais: NUNCA devem entrar numa imagem.
+.env
+.env.*
+
+# Relatórios gerados pelos scans e logs.
+trivy-report.txt
+npm-audit-report.txt
+*.log

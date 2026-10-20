@@ -1,0 +1,9 @@
+01-npm-ci -> exit code 0
+02-npm-build -> exit code 0
+03-npm-test -> exit code 0
+04-npm-audit -> exit code 1
+05-trivy -> exit code 0
+06-docker-build -> exit code 0
+07-docker-images -> exit code 0
+08-deploy -> exit code 0
+09-docker-ps -> exit code 0

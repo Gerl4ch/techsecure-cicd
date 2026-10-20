@@ -1,0 +1,6 @@
+# 2026-10-19 21:30:14 | comando: docker images
+IMAGE                               ID             DISK USAGE   CONTENT SIZE   EXTRA
+bkimminich/juice-shop:latest        73c53fbf442e        511MB          115MB   U    
+ghcr.io/aquasecurity/trivy:0.69.3   bcc376de8d77        245MB         59.1MB        
+ghcr.io/zaproxy/zaproxy:stable      781a2bdaea47       3.71GB          1.2GB        
+techsecure-app:latest               fe518f52f082        252MB         62.2MB        

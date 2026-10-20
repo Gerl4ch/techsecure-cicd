@@ -1,0 +1,3 @@
+# 2026-10-19 21:30:29 | comando: docker ps --filter name=techsecure-app
+CONTAINER ID   IMAGE            COMMAND                  CREATED         STATUS                   PORTS                                         NAMES
+8385166def31   techsecure-app   "docker-entrypoint.s…"   7 seconds ago   Up 7 seconds (healthy)   0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp   techsecure-app

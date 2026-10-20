@@ -1,0 +1,18 @@
+# 2026-10-19 21:30:14 | comando: bash scripts/deploy.sh techsecure-app
+==> [1/5] A descarregar a imagem: techsecure-app
+Using default tag: latest
+Error response from daemon: pull access denied for techsecure-app, repository does not exist or may require 'docker login'
+    (pull falhou; a tentar usar imagem local)
+==> [2/5] A remover o contentor antigo (se existir)
+==> [3/5] A arrancar o contentor novo
+8385166def3182b5dc0ef9bcd59dddae980945ec2115b96f3c469f16d16cd39c
+==> [4/5] A esperar que o contentor fique saudável (máx. 60 s)
+==> [5/5] Smoke test e evidências
+GET /health  -> {"status":"ok"}
+GET /api/greet -> {"message":"Olá, Pipeline!"}
+
+--- docker ps (EVIDÊNCIA: contentor em execução) ---
+CONTAINER ID   IMAGE            COMMAND                  CREATED         STATUS                   PORTS                                         NAMES
+8385166def31   techsecure-app   "docker-entrypoint.s…"   7 seconds ago   Up 6 seconds (healthy)   0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp   techsecure-app
+
+DEPLOY CONCLUÍDO: aplicação disponível em http://localhost:3000
