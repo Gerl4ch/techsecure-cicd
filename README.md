@@ -11,11 +11,11 @@ Código ─► Build ─► Teste ─► Análise de Segurança ─► Imagem Do
 ## Equipa
 | Nome | Papel |
 |---|---|
-| _(nome)_ | Contentores e deploy |
-| _(nome)_ | Validação local |
-| _(nome)_ | Aplicação e testes |
-| _(nome)_ | Pipeline e GitHub |
-| _(nome)_ | Segurança e documentação |
+| Leonardo Gerlach | Contentores e deploy |
+| Leonardo Gerlach | Validação local |
+| Henrique Fried | Aplicação e testes |
+| Guilherme Borges | Pipeline e GitHub |
+| Henrique Fried e Guilherme Borges | Segurança e documentação |
 
 ## Estrutura do repositório
 ```
