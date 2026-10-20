@@ -40,7 +40,7 @@ const _ = require('lodash');
 // ALTERAR ESTA LINHA É A "ALTERAÇÃO SIMPLES NO CÓDIGO" DA DEMONSTRAÇÃO:
 // muda o texto, faz commit + push e vê a pipeline arrancar sozinha e o contentor
 // novo mostrar a mensagem atualizada.
-const APP_MESSAGE = 'Pipeline CI/CD segura em funcionamento — versão 1.0';
+const APP_MESSAGE = 'Pipeline CI/CD segura em funcionamento — versão 2.0 (deploy automático)';
 
 // Nome da empresa fictícia do cenário do trabalho (aparece na página inicial).
 const COMPANY = 'TechSecure Solutions';
